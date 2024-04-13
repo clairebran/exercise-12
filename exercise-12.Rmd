@@ -15,6 +15,8 @@ Loading necessary packages:
 library(tidyverse)
 library(skimr)
 library(naniar)
+library(MASS)
+library(AICmodavg)
 ```
 
 Loading data set:
@@ -196,5 +198,109 @@ Most of the data in this case is missing, but of the three mammalian orders with
 
 ### Step 6
 
-Run models and a model selection process to evaluate what variables best predict each of the two response variables, maximum lifespan and age at first repdocution, from the set of the following predictors: gestation, newborn, weaning, wean mass, litters/year, and overall body mass. 
+Run models and a model selection process to evaluate what variables best predict each of the two response variables, maximum lifespan and age at first reproduction, from the set of the following predictors: gestation, newborn, weaning, wean mass, litters/year, and overall body mass. 
+
+First, winnowing the data set to drop rows that are missing the respective response variable or any of the predictors:
+
+```{r}
+d <- d %>% drop_na(
+  `max. life(mo)`, 
+  `AFR(mo)`, 
+  `gestation(mo)`, 
+  `newborn(g)`, 
+  `weaning(mo)`, 
+  `wean mass(g)`, 
+  `litters/year`, 
+  `mass(g)`)
+```
+
+Model selection process for response variable max lifespan, starting with a full model:
+
+```{r}
+m_full <- lm(data = d, `max. life(mo)` ~ `gestation(mo)` + 
+          `newborn(g)` + 
+          `weaning(mo)` + 
+          `wean mass(g)` + 
+          `litters/year` + 
+          `mass(g)`)
+(s <- stepAIC(m_full, scope = . ~ ., direction = "both"))
+```
+
+Backward selection:
+
+```{r}
+drop1(m_full, test = "F")
+```
+
+Update by removing wean mass, which has the lowest F value 
+
+```{r}
+m2 <- update(m_full, .~. - `wean mass(g)`)
+summary(m2)
+```
+
+Overall the model is still significant. Dropping from m2:
+
+```{r}
+drop1(m2, test = "F")
+```
+
+Update by removing mass from the model:
+
+```{r}
+m3 <- update(m2, .~. - `mass(g)` )
+summary(m3)
+```
+
+The model is still significant. Dropping from m3:
+
+```{r}
+drop1(m3, test = "F")
+```
+
+Update by removing litters per year from the model:
+
+```{r}
+m4 <- update(m3, .~. - `litters/year`)
+summary(m4)
+```
+
+The model is still significant. Dropping from m4:
+
+```{r}
+drop1(m4, test = "F")
+```
+
+Update by removing weaning:
+
+```{r}
+m5 <- update(m4, .~. - `weaning(mo)`)
+summary(m5)
+```
+
+The model is still significant. Dropping from m5:
+
+```{r}
+drop1(m5, test = "F")
+```
+
+Update the model by removing newborn mass: 
+
+```{r}
+m6 <- update(m5, .~. - `newborn(g)`)
+summary(m6)
+```
+
+The model is still significant. Dropping from m6:
+
+```{r}
+drop1(m6, test = "F")
+```
+
+Updating the model by removing gestation:
+
+```{r}
+m7 <- update(m6, .~. - `gestation(mo)`)
+summary(m7)
+```
 
