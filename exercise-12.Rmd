@@ -1,0 +1,200 @@
+---
+title: "Exercise 12"
+author: "Claire Brandes"
+date: "April 11, 2024"
+output: 
+  html_document: 
+    highlight: tango
+---
+
+# Practice Model Selection 
+
+Loading necessary packages:
+
+```{r message=FALSE}
+library(tidyverse)
+library(skimr)
+library(naniar)
+```
+
+Loading data set:
+
+```{r message=FALSE}
+f <- "https://raw.githubusercontent.com/difiore/ada-2024-datasets/main/Mammal_lifehistories_v2.txt"
+d <- read_tsv(f, col_names = TRUE)
+```
+
+Brief exploratory data analysis:
+
+```{r}
+skm <- skim(d)
+
+as.data.frame(skm) %>% select(skim_type, skim_variable)
+```
+
+The categorical variables are order, family, Genus, and species. The numeric variables are mass, gestation, newborn, weaning, wean mass, AFR, max.life, litter size, litters/year, and refs. 
+
+## Challenge 
+
+### Step 1
+
+Replace all values of -999 with NA
+
+```{r}
+d <- d %>% 
+  replace_with_na_all(condition = ~.x == -999)
+```
+
+### Step 2
+
+Drop the variables **litter size** and **refs**
+
+```{r}
+d <- d %>% select(-12, -14)
+```
+
+### Step 3
+
+Log transform all other numeric variables 
+
+```{r}
+d <- d %>% mutate(
+  "logMass" = log(`mass(g)`),
+  "logGes" = log(`gestation(mo)`),
+  "logNB" = log(`newborn(g)`),
+  "logWean" = log(`weaning(mo)`),
+  "logWM" = log(`wean mass(g)`),
+  "logAFR" = log(`AFR(mo)`),
+  "logML" = log(`max. life(mo)`),
+  "logLit" = log(`litters/year`)
+  )
+```
+
+### Step 4
+
+Regress the now log transformed variables on overall body mass and add the residuals to the data frame as new variables.
+
+Regressing age on overall body mass:
+
+```{r}
+m_Gest <- lm(data = d, logMass ~ logGes)
+
+# Adding na.action = na.exclude in my lm() call did not seem to pad my data with NAs and resulted in the error "existing data has 1440 rows, assigned data has 991 rows" when I tried to run the line "d$res_Gest <- m_Gest$residuals." 
+# The same happens when I try "d$relGest <- residuals(m_Gest)." 
+# My alternate solution to adding the residuals to the data frame is in the code below:  
+
+res_Gest <- m_Gest$residuals # extracting residuals 
+
+# Another note - running "length(res_Gest)" returns a value of 1440 rows, but running "length(res_Gest)" returns a value of 991 ??
+
+missing_1 <- is.na(d$logMass) | is.na(d$logGes) # Finding which rows have NAs 
+
+na_vector1 <- rep(NA, sum(missing_1)) # Making a vector of NAs that is the number of missing values in the m_Gest residuals compared to the original data frame d
+
+res_Gest[missing_1] <- na_vector1 # Inserting residual NAs where there are NAs in the original data set
+
+d$relGest <- res_Gest # Adding residuals to the data frame 
+```
+
+Regressing weaning (in months) on overall body mass:
+
+```{r}
+m_Wean <- lm(data = d, logMass ~ logWean)
+
+res_Wean <- m_Wean$residuals
+missing2 <- is.na(d$logMass) | is.na(d$logWean)
+na_vector2 <- rep(NA, sum(missing2))
+res_Wean[missing2] <- na_vector2
+d$relWean <- res_Wean
+```
+
+Regressing age at first reproduction on overall body mass:
+
+```{r}
+m_AFR <- lm(data = d, logMass ~ logAFR)
+
+res_AFR <- m_AFR$residuals
+missing3 <- is.na(d$logMass) | is.na(d$logAFR)
+na_vector3 <- rep(NA, sum(missing3))
+res_AFR[missing3] <- na_vector3
+d$relAFR <- res_AFR
+```
+
+Regressing maximum lifespan on overall body mass:
+
+```{r}
+m_Life <- lm(data = d, logMass ~ logML)
+
+res_Life <- m_Life$residuals
+missing4 <- is.na(d$logMass) | is.na(d$logML)
+na_vector4 <- rep(NA, sum(missing4))
+res_Life[missing4] <- na_vector4
+d$relLife <- res_Life
+```
+
+Regressing newborn mass on overall body mass:
+
+```{r}
+m_NB <- lm(data = d, logMass ~ logNB) 
+
+res_NB <- m_NB$residuals 
+missing5 <- is.na(d$logMass) | is.na(d$logNB)
+na_vector5 <- rep(NA, sum(missing5))
+res_NB[missing5] <- na_vector5
+d$relNewbornMass <- res_NB
+```
+
+Regressing weaning mass on overall body mass:
+
+```{r}
+m_WM <- lm(data = d, logMass ~ logWM)
+
+res_WM <- m_WM$residuals
+missing6 <- is.na(d$logMass) | is.na(d$logWM)
+na_vector6 <- rep(NA, sum(missing6))
+res_WM[missing6] <- na_vector6
+d$relWeaningMass <- res_WM
+```
+
+### Step 5
+
+Plotting residuals of max lifespan in relation to Order:
+
+```{r warning=FALSE}
+ggplot(data = d, aes(x = order, y = relLife)) +
+  geom_boxplot() +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  xlab("Order") + ylab("Maximum Lifespan Residuals")
+```
+
+Artiodactyla, Carnivora, and Insectivora are the mammalian orders that geenrally have the highest residual lifespans. 
+
+Plotting residuals of newborn mass in relation to Order:
+
+```{r warning=FALSE}
+ggplot(data = d, aes(x = order, y = relNewbornMass)) +
+  geom_boxplot() +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  xlab("Order") + ylab("Newborn Mass Residuals")
+```
+
+There is less variation in residuals of newborn mass across mammalian orders than there is in max lifespan. In general, however, Artiodactyla, Carnivora, and Rodentia are on the higher end of residual newborn mass. 
+
+Plotting residuals of weaning mass in relation to Order:
+
+```{r warning=FALSE}
+ggplot(data = d, aes(x = order, y = relWeaningMass)) +
+  geom_boxplot() +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  xlab("Order") + ylab("Weaning Mass Residuals")
+```
+
+Most of the data in this case is missing, but of the three mammalian orders with data, Cetacea overall seems to have the highest relative weaning mass. 
+
+### Step 6
+
+Run models and a model selection process to evaluate what variables best predict each of the two response variables, maximum lifespan and age at first repdocution, from the set of the following predictors: gestation, newborn, weaning, wean mass, litters/year, and overall body mass. 
+
