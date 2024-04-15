@@ -1,10 +1,14 @@
 ---
 title: "Exercise 12"
 author: "Claire Brandes"
-date: "April 11, 2024"
+date: "April 15, 2024"
 output: 
   html_document: 
     highlight: tango
+    toc: TRUE
+    toc_float: TRUE
+    collapsed: FALSE
+    smooth_scroll: TRUE
 ---
 
 # Practice Model Selection 
@@ -16,7 +20,7 @@ library(tidyverse)
 library(skimr)
 library(naniar)
 library(MASS)
-library(AICmodavg)
+library(MuMIn)
 ```
 
 Loading data set:
@@ -30,8 +34,7 @@ Brief exploratory data analysis:
 
 ```{r}
 skm <- skim(d)
-
-as.data.frame(skm) %>% select(skim_type, skim_variable)
+as.data.frame(skm) %>% dplyr::select(skim_type, skim_variable)
 ```
 
 The categorical variables are order, family, Genus, and species. The numeric variables are mass, gestation, newborn, weaning, wean mass, AFR, max.life, litter size, litters/year, and refs. 
@@ -52,7 +55,7 @@ d <- d %>%
 Drop the variables **litter size** and **refs**
 
 ```{r}
-d <- d %>% select(-12, -14)
+d <- d %>% dplyr::select(-12, -14)
 ```
 
 ### Step 3
@@ -198,6 +201,8 @@ Most of the data in this case is missing, but of the three mammalian orders with
 
 ### Step 6
 
+#### Part 1
+
 Run models and a model selection process to evaluate what variables best predict each of the two response variables, maximum lifespan and age at first reproduction, from the set of the following predictors: gestation, newborn, weaning, wean mass, litters/year, and overall body mass. 
 
 First, winnowing the data set to drop rows that are missing the respective response variable or any of the predictors:
@@ -214,7 +219,7 @@ d <- d %>% drop_na(
   `mass(g)`)
 ```
 
-Model selection process for response variable max lifespan, starting with a full model:
+Model selection process for response variable **max lifespan**, starting with a full model:
 
 ```{r}
 m_full <- lm(data = d, `max. life(mo)` ~ `gestation(mo)` + 
@@ -304,3 +309,163 @@ m7 <- update(m6, .~. - `gestation(mo)`)
 summary(m7)
 ```
 
+Installing older version of package {AICcmodavg} that is compatible with my version of R:
+
+```{r message=FALSE}
+package_url <- "https://cran.r-project.org/src/contrib/Archive/AICcmodavg/AICcmodavg_2.3-1.tar.gz"
+
+# Ran the following code in my R console:
+# install.packages(package_url, repos = NULL, type = "source)
+
+library(AICcmodavg)
+```
+
+Calculating AICc:
+
+```{r}
+aictab(list(m2, m3, m4, m5, m6, m7), c("m2", "m3", "m4", "m5", "m6", "m7"))
+```
+
+Based on AICc, the best model overall is m3: lm(`max. life(mo)` ~ `gestation(mo)` + `newborn(g)` + `weaning(mo)` + `litters/year`, data = d). Only two models (m3 and m2) have a delta AICc of 4 or less. The variables gestation, newborn, weaning, litters/year, and mass appear in both of these models. 
+    
+Calculating and plotting the model-averaged coefficients and their CIs across this set of top models:
+
+```{r error=TRUE}
+global1 <- lm(data = d, `max. life(mo)` ~ `gestation(mo)` + `newborn(g)` + `weaning(mo)` + `litters/year`, na.action = "na.fail")
+mods <- dredge(global1, beta = "none", m.lim = c(0,4)) # set 4 as the max number of terms to use based on best model
+mods.avg.ML <- summary(model.avg(mods, subset = delta < 4, fit = TRUE))
+```
+
+Unsure why I am getting the above error as there *is* more than one model with delta < 4. 
+
+Calculating and plotting CIs:
+
+```{r}
+# If my previous code worked this is what I would need to run next:
+
+# confint(mods.avg.ML)
+
+# plot(mods.avg, full = TRUE, intercept = FALSE)
+```
+
+#### Part 2
+
+Model selection process for response variable **AFR(mo)**, starting with a full model:
+
+```{r}
+m_full2 <- lm(data = d, `AFR(mo)` ~ `gestation(mo)` +
+          `newborn(g)` + 
+          `weaning(mo)` + 
+          `wean mass(g)` + 
+          `litters/year` + 
+          `mass(g)`)
+(s2 <- stepAIC(m_full2, scope = .~., direction = "both"))
+```
+
+Backward selection:
+
+```{r}
+drop1(m_full2, test = "F")
+```
+
+Update by removing mass, which has the lowest F value
+
+```{r}
+mb <- update(m_full2, .~. - `mass(g)`)
+summary(mb)
+```
+
+Overall the model is still significant. Dropping from mb:
+
+```{r}
+drop1(mb, test = "F")
+```
+
+Update by removing wean mass from the model:
+
+```{r}
+mc <- update(mb, .~. - `wean mass(g)`)
+summary(mc)
+```
+
+The model is still significant. Dropping from mc:
+
+```{r}
+drop1(mc, test = "F")
+```
+
+Update by removing newborn mass
+
+```{r}
+md <- update(mc, .~. - `newborn(g)`)
+summary(md)
+```
+
+The model is still significant. Dropping from md:
+
+```{r}
+drop1(md, test = "F")
+```
+
+Update by removing litters/year
+
+```{r}
+me <- update(md, .~. - `litters/year`)
+summary(me)
+```
+
+The model is still significant. Dropping from me:
+
+```{r}
+drop1(me, test = "F")
+```
+
+Update by removing gestation age
+
+```{r}
+mf <- update(me, .~. - `gestation(mo)`)
+summary(mf)
+```
+
+The model is still significant. Dropping from mf:
+
+```{r}
+drop1(mf, test = "F")
+```
+
+Update by removing weaning age:
+
+```{r}
+mg <- update(mf, .~. - `weaning(mo)`)
+summary(mg)
+```
+
+Calculating AICc:
+
+```{r}
+aictab(list(mb, mc, md, me, mf, mg), c("mb", "mc", "md", "me", "mf", "mg"))
+```
+
+Based on AICc, the best model overall is mb: lm(`AFR(mo)` ~ `gestation(mo)` + `newborn(g)` + `weaning(mo)` + 
+`wean mass(g)` + `litters/year`, data = d). Three models (mb, mc, and md) have a delta AICc of 4 or less. 
+    
+Calculating and plotting the model-averaged coefficients and their CIs across this set of top models:
+
+```{r error=TRUE}
+global2 <- lm(data = d, `AFR(mo)` ~ `gestation(mo)` + `newborn(g)` + `weaning(mo)` + 
+`wean mass(g)` + `litters/year`, na.action = "na.fail")
+mods <- dredge(global2, beta = "none", m.lim = c(0,3)) # set 3 as the max number of terms to use based on best model
+mods.avg.AFR <- summary(model.avg(mods, subset = delta < 4, fit = TRUE))
+```
+
+Still unsure why I am getting the above error as there *is* more than one model with delta < 4. 
+
+Calculating and plotting CIs:
+
+```{r}
+# If my previous code worked this is what I would need to run next:
+
+# confint(mods.avg.AFR)
+
+# plot(mods.avg, full = TRUE, intercept = FALSE)
+```
